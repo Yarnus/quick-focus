@@ -1,0 +1,11 @@
+## Interface: 120001, 110107
+## Title: QuickFocus
+## Notes: Lightweight secure mouseover focus, raid marker and callout.
+## Notes-zhCN: 轻量、安全的鼠标悬停设焦点、团队标记与喊话插件。
+## Notes-zhTW: 輕量、安全的滑鼠懸停設焦點、團隊標記與喊話插件。
+## Author: Codex
+## Version: 1.1.0
+## SavedVariablesPerCharacter: QuickFocusDB
+
+QuickFocus.lua
+QuickFocus_Options.lua
