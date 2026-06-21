@@ -16,14 +16,14 @@ QuickFocus is a lightweight WoW Retail addon that reimplements the core features
 
 ## Lightweight Design
 
-- Does not scan unit frames
+- Installs secure click attributes on unit frames and nameplates
 - Does not use `OnUpdate`
 - Does not poll continuously
-- Listens only for addon loading, login, and leaving combat events
+- Listens only for addon loading, login, macro changes, nameplates, roster changes, and leaving combat events
 - Creates settings controls only when the settings page is opened for the first time
 - Uses one character macro slot
 
-Newer WoW clients restrict addons from dynamically executing `macrotext`. QuickFocus therefore uses real macros with secure state drivers so protected actions continue to work during combat.
+Newer WoW clients restrict addons from dynamically executing `macrotext`. QuickFocus therefore uses one real macro with secure click attributes so protected actions continue to work during combat.
 
 ## Installation and Usage
 

@@ -5,8 +5,8 @@ ns.addon = addon
 
 local FOCUS_MACRO = "QF_Focus"
 local MACRO_ICON = 134400
-local STATE_NAME = "quickfocus"
 local DB_VERSION = 2
+local BUTTON_NAME = ADDON_NAME .. "ClickButton"
 
 local locale = GetLocale()
 local isChinese = locale == "zhCN" or locale == "zhTW"
@@ -75,6 +75,8 @@ local DEFAULTS = {
     version = DB_VERSION,
 }
 
+local installedFrames = {}
+
 local MARKS = {
     { 1, L.MARKS[1], "{rt1}" },
     { 2, L.MARKS[2], "{rt2}" },
@@ -87,9 +89,9 @@ local MARKS = {
 }
 
 local MODIFIERS = {
-    { "SHIFT", L.MODIFIERS[1], "SHIFT-BUTTON1" },
-    { "ALT", L.MODIFIERS[2], "ALT-BUTTON1" },
-    { "CTRL", L.MODIFIERS[3], "CTRL-BUTTON1" },
+    { "SHIFT", L.MODIFIERS[1], "SHIFT-BUTTON1", "shift" },
+    { "ALT", L.MODIFIERS[2], "ALT-BUTTON1", "alt" },
+    { "CTRL", L.MODIFIERS[3], "CTRL-BUTTON1", "ctrl" },
 }
 
 local CHANNELS = {
@@ -160,6 +162,11 @@ function addon:GetBindingChord()
     return option and option[3] or MODIFIERS[1][3]
 end
 
+function addon:GetModifierAttribute()
+    local option = self:GetModifier(self.db.modifier)
+    return option and option[4] or MODIFIERS[1][4]
+end
+
 function addon:GetChatCommand()
     local option = self:GetChannel(self.db.chatMode)
     if not option then
@@ -211,47 +218,28 @@ function addon:GetMacroPreview()
     return body, #body, #body <= 255
 end
 
-local function MacroMatches(index, body)
-    if type(index) ~= "number" or index <= 0 then
-        return false
-    end
-    local _, _, savedBody = GetMacroInfo(index)
-    return savedBody == body
-end
-
 function addon:EnsureMacro(name, body)
-    if #body > 255 then
-        return nil, "TOO_LONG"
-    end
-
     local index = GetMacroIndexByName(name)
     if index and index > 0 then
-        local _, _, currentBody = GetMacroInfo(index)
-        if currentBody ~= body then
-            local ok
-            ok, index = pcall(EditMacro, index, name, MACRO_ICON, body)
-            if not ok or not index or index == 0 then
-                return nil, "CREATE_FAILED"
-            end
-            if not MacroMatches(index, body) then
-                return nil, "CREATE_FAILED"
-            end
-        end
         return name
+    end
+
+    if #body > 255 then
+        return nil, "TOO_LONG"
     end
 
     local generalCount, characterCount = GetNumMacros()
     if characterCount < MAX_CHARACTER_MACROS then
         local ok
         ok, index = pcall(CreateMacro, name, MACRO_ICON, body, true)
-        if ok and MacroMatches(index, body) then
+        if ok and index and index > 0 then
             return name
         end
     end
     if generalCount < MAX_ACCOUNT_MACROS then
         local ok
         ok, index = pcall(CreateMacro, name, MACRO_ICON, body, false)
-        if ok and MacroMatches(index, body) then
+        if ok and index and index > 0 then
             return name
         end
     end
@@ -261,34 +249,137 @@ function addon:EnsureMacro(name, body)
     return nil, "CREATE_FAILED"
 end
 
-function addon:CreateDriver()
-    if self.driver then
-        return self.driver
+function addon:CreateClickButton()
+    if self.clickButton then
+        return self.clickButton
     end
 
-    local driver = CreateFrame(
-        "Frame",
-        ADDON_NAME .. "BindingDriver",
+    local button = CreateFrame(
+        "Button",
+        BUTTON_NAME,
         UIParent,
-        "SecureHandlerStateTemplate"
+        "SecureActionButtonTemplate"
     )
-    driver:SetAttribute("_onstate-" .. STATE_NAME, [[
-        self:ClearBindings()
-        local macro = self:GetAttribute("focusMacro")
-        local chord = self:GetAttribute("chord")
-        if macro and chord then
-            self:SetBindingMacro(true, chord, macro)
+    button:SetAttribute("type1", "macro")
+    button:SetAttribute("macro", FOCUS_MACRO)
+    button:RegisterForClicks("AnyDown", "AnyUp")
+    self.clickButton = button
+    return button
+end
+
+function addon:ClearFrameBindings(frame)
+    for index = 1, #MODIFIERS do
+        local prefix = MODIFIERS[index][4]
+        frame:SetAttribute(prefix .. "-type1", nil)
+        frame:SetAttribute(prefix .. "-macro1", nil)
+    end
+    frame.quickFocusModifier = nil
+end
+
+function addon:SetupUnitFrame(frame)
+    if not frame or type(frame.SetAttribute) ~= "function" then
+        return
+    end
+    if InCombatLockdown() then
+        self.pendingFrames = self.pendingFrames or {}
+        self.pendingFrames[frame] = true
+        return
+    end
+
+    local prefix = self:GetModifierAttribute()
+    if frame.quickFocusModifier ~= prefix then
+        self:ClearFrameBindings(frame)
+    end
+    frame:SetAttribute(prefix .. "-type1", "macro")
+    frame:SetAttribute(prefix .. "-macro1", FOCUS_MACRO)
+    frame.quickFocusModifier = prefix
+    installedFrames[frame] = true
+    self.pendingFrames = self.pendingFrames or {}
+    self.pendingFrames[frame] = nil
+end
+
+function addon:ClearUnitFrameBindings()
+    if InCombatLockdown() then
+        return
+    end
+    for frame in pairs(installedFrames) do
+        self:ClearFrameBindings(frame)
+        installedFrames[frame] = nil
+    end
+end
+
+function addon:SetupPendingFrames()
+    if not self.pendingFrames then
+        return
+    end
+    for frame in pairs(self.pendingFrames) do
+        self:SetupUnitFrame(frame)
+    end
+end
+
+function addon:HookUnitFrameCreation()
+    if self.createFrameHooked then
+        return
+    end
+    self.createFrameHooked = true
+    hooksecurefunc("CreateFrame", function(_, name, parent, template)
+        if template and template:find("SecureUnitButtonTemplate", 1, true) then
+            addon:SetupUnitFrame(name and _G[name])
         end
-    ]])
-    self.driver = driver
-    return driver
+    end)
+end
+
+function addon:SetupExistingUnitFrames()
+    local handled = {}
+    for _, frame in pairs(_G) do
+        if type(frame) == "table"
+            and type(frame.GetObjectType) == "function"
+            and type(frame.GetAttribute) == "function"
+            and frame:GetAttribute("unit")
+            and not handled[frame]
+        then
+            handled[frame] = true
+            self:SetupUnitFrame(frame)
+        end
+    end
+end
+
+function addon:SetupFrameTree(frame)
+    if not frame or type(frame.GetChildren) ~= "function" then
+        return
+    end
+    if type(frame.GetAttribute) == "function" and frame:GetAttribute("unit") then
+        self:SetupUnitFrame(frame)
+    end
+    local children = { frame:GetChildren() }
+    for index = 1, #children do
+        self:SetupFrameTree(children[index])
+    end
+end
+
+function addon:SetupNamePlateUnitFrame(unitToken)
+    if not C_NamePlate or not C_NamePlate.GetNamePlateForUnit then
+        return
+    end
+    local plate = C_NamePlate.GetNamePlateForUnit(unitToken)
+    self:SetupFrameTree(plate)
+end
+
+function addon:ClearClickBindings()
+    if self.clickButton then
+        ClearOverrideBindings(self.clickButton)
+    end
+end
+
+function addon:SetupClickBindings()
+    local button = self:CreateClickButton()
+    self:ClearClickBindings()
+    SetOverrideBindingClick(button, true, self:GetBindingChord(), BUTTON_NAME)
 end
 
 function addon:Disable()
-    if self.driver then
-        UnregisterStateDriver(self.driver, STATE_NAME)
-        ClearOverrideBindings(self.driver)
-    end
+    self:ClearClickBindings()
+    self:ClearUnitFrameBindings()
     self.active = false
 end
 
@@ -322,12 +413,9 @@ function addon:Refresh()
         return
     end
 
-    local driver = self:CreateDriver()
-    driver:SetAttribute("focusMacro", FOCUS_MACRO)
-    driver:SetAttribute("chord", self:GetBindingChord())
-    UnregisterStateDriver(driver, STATE_NAME)
-    ClearOverrideBindings(driver)
-    RegisterStateDriver(driver, STATE_NAME, "focus")
+    self:SetupClickBindings()
+    self:HookUnitFrameCreation()
+    self:SetupExistingUnitFrames()
     self.active = true
     ns.RefreshOptions()
 end
@@ -432,8 +520,20 @@ addon:SetScript("OnEvent", function(self, event, arg1)
         if GetMacroIndexByName(FOCUS_MACRO) == 0 then
             self:ApplySettings()
         end
-    elseif event == "PLAYER_REGEN_ENABLED" and self.pendingRefresh then
-        self:Refresh()
+    elseif event == "NAME_PLATE_UNIT_ADDED" then
+        if self.db and self.db.enabled and not InCombatLockdown() then
+            self:SetupNamePlateUnitFrame(arg1)
+        end
+    elseif event == "GROUP_ROSTER_UPDATE" then
+        if self.db and self.db.enabled and not InCombatLockdown() then
+            self:SetupExistingUnitFrames()
+        end
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if self.pendingRefresh then
+            self:Refresh()
+        else
+            self:SetupPendingFrames()
+        end
     end
 end)
 
@@ -442,3 +542,5 @@ addon:RegisterEvent("PLAYER_LOGIN")
 addon:RegisterEvent("PLAYER_ENTERING_WORLD")
 addon:RegisterEvent("UPDATE_MACROS")
 addon:RegisterEvent("PLAYER_REGEN_ENABLED")
+addon:RegisterEvent("GROUP_ROSTER_UPDATE")
+addon:RegisterEvent("NAME_PLATE_UNIT_ADDED")
