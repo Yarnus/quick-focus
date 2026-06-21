@@ -21,7 +21,7 @@ QuickFocus is a lightweight WoW Retail addon that reimplements the core features
 - Does not poll continuously
 - Listens only for addon loading, login, and leaving combat events
 - Creates settings controls only when the settings page is opened for the first time
-- Uses only one macro slot by default, and one additional slot when clearing from an empty area is enabled
+- Uses one character macro slot
 
 Newer WoW clients restrict addons from dynamically executing `macrotext`. QuickFocus therefore uses real macros with secure state drivers so protected actions continue to work during combat.
 
@@ -34,4 +34,4 @@ Place the `QuickFocus` folder in `_retail_/Interface/AddOns/`, then enter one of
 - `/qf off`: Disable QuickFocus
 - `/qf status`: Show the current status
 
-The addon reserves the macro names `QF_Focus` and `QF_Clear`.
+The addon reserves the macro name `QF_Focus`.

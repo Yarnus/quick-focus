@@ -21,7 +21,7 @@ QuickFocus 是参照 EasyFocus 功能重新实现的 WoW Retail 轻量插件。
 - 不持续轮询
 - 只监听加载、登录和脱战 3 个事件
 - 设置控件只在首次打开设置页时创建
-- 默认只占用 1 个宏槽；开启空白处清除时才额外占用 1 个
+- 只占用 1 个角色宏槽
 
 新版客户端限制插件动态执行 `macrotext`，因此 QuickFocus 使用真实宏配合安全状态驱动，
 以保证受保护动作在战斗中也能正常工作。
@@ -35,4 +35,4 @@ QuickFocus 是参照 EasyFocus 功能重新实现的 WoW Retail 轻量插件。
 - `/qf off`：停用
 - `/qf status`：查看运行状态
 
-插件使用保留宏名 `QF_Focus` 和 `QF_Clear`。
+插件使用保留宏名 `QF_Focus`。

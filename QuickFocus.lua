@@ -4,7 +4,6 @@ local addon = CreateFrame("Frame")
 ns.addon = addon
 
 local FOCUS_MACRO = "QF_Focus"
-local CLEAR_MACRO = "QF_Clear"
 local MACRO_ICON = 134400
 local STATE_NAME = "quickfocus"
 
@@ -27,7 +26,6 @@ local L = isChinese and {
     MESSAGE_TOO_LONG = "喊话内容过长，宏超过 255 字节，已保留旧设置。",
     MACRO_FULL = "宏栏已满，无法创建 %s。",
     MACRO_CREATE_FAILED = "无法创建或更新 %s，请打开宏界面检查宏名称和可用宏槽。",
-    CLEAR_MACRO_FULL = "宏栏已满，空白处清除功能暂不可用。",
     ENABLED = "已启用。",
     DISABLED = "已停用。",
     RUNNING = "运行中",
@@ -53,7 +51,6 @@ local L = isChinese and {
     MESSAGE_TOO_LONG = "The callout is too long and exceeds the 255-byte macro limit. The previous settings were kept.",
     MACRO_FULL = "The macro slots are full. Unable to create %s.",
     MACRO_CREATE_FAILED = "Unable to create or update %s. Open the macro UI and check the macro name and available slots.",
-    CLEAR_MACRO_FULL = "The macro slots are full. Clear-on-blank is temporarily unavailable.",
     ENABLED = "Enabled.",
     DISABLED = "Disabled.",
     RUNNING = "Running",
@@ -70,7 +67,7 @@ local DEFAULTS = {
     enabled = true,
     modifier = "SHIFT",
     mark = 8,
-    clearOnBlank = false,
+    clearOnBlank = true,
     chatMode = "PARTY",
     customCommand = "",
     message = L.DEFAULT_MESSAGE,
@@ -188,19 +185,23 @@ end
 
 function addon:BuildFocusMacro()
     local lines = {
-        "/focus [@mouseover,harm,nodead]",
-        "/tm [@focus,exists,harm,nodead] 0",
+        "/stopmacro [@mouseover,exists,noharm][@mouseover,dead]"
     }
+    if self.db.clearOnBlank then
+        lines[#lines + 1] = "/tm [@focus,exists] 0"
+        lines[#lines + 1] = "/clearfocus [@mouseover,noexists]"
+        lines[#lines + 1] = "/stopmacro [@mouseover,noexists]"
+    else
+        lines[#lines + 1] = "/stopmacro [@mouseover,noexists]"
+        lines[#lines + 1] = "/tm [@focus,exists] 0"
+    end
+    lines[#lines + 1] = "/focus [@mouseover,harm,nodead]"
     local command = self:GetChatCommand()
     if command then
         lines[#lines + 1] = "/" .. command .. " " .. self:GetMessage()
     end
     lines[#lines + 1] = "/tm [@focus,exists,harm,nodead] " .. self.db.mark
     return table.concat(lines, "\n")
-end
-
-function addon:BuildClearMacro()
-    return "/tm [@focus,exists] 0\n/clearfocus [@focus,exists]"
 end
 
 function addon:GetMacroPreview()
@@ -258,13 +259,6 @@ function addon:EnsureMacro(name, body)
     return nil, "CREATE_FAILED"
 end
 
-function addon:GetStateCondition()
-    if self.db.clearOnBlank and self.clearMacroReady then
-        return "[@mouseover,harm,nodead] focus; [@mouseover,noexists] clear; none"
-    end
-    return "[@mouseover,harm,nodead] focus; none"
-end
-
 function addon:CreateDriver()
     if self.driver then
         return self.driver
@@ -278,12 +272,7 @@ function addon:CreateDriver()
     )
     driver:SetAttribute("_onstate-" .. STATE_NAME, [[
         self:ClearBindings()
-        local macro
-        if newstate == "focus" then
-            macro = self:GetAttribute("focusMacro")
-        elseif newstate == "clear" then
-            macro = self:GetAttribute("clearMacro")
-        end
+        local macro = self:GetAttribute("focusMacro")
         local chord = self:GetAttribute("chord")
         if macro and chord then
             self:SetBindingMacro(true, chord, macro)
@@ -331,29 +320,12 @@ function addon:Refresh()
         return
     end
 
-    self.clearMacroReady = false
-    if self.db.clearOnBlank then
-        local clearName, clearReason = self:EnsureMacro(CLEAR_MACRO, self:BuildClearMacro())
-        self.clearMacroReady = clearName ~= nil
-        if not clearName and not self.clearWarningShown then
-            self.clearWarningShown = true
-            if clearReason == "NO_SLOT" then
-                Print(L.CLEAR_MACRO_FULL)
-            else
-                Print(L.MACRO_CREATE_FAILED:format(CLEAR_MACRO))
-            end
-        end
-    else
-        self.clearWarningShown = nil
-    end
-
     local driver = self:CreateDriver()
     driver:SetAttribute("focusMacro", FOCUS_MACRO)
-    driver:SetAttribute("clearMacro", self.clearMacroReady and CLEAR_MACRO or nil)
     driver:SetAttribute("chord", self:GetBindingChord())
     UnregisterStateDriver(driver, STATE_NAME)
     ClearOverrideBindings(driver)
-    RegisterStateDriver(driver, STATE_NAME, self:GetStateCondition())
+    RegisterStateDriver(driver, STATE_NAME, "focus")
     self.active = true
     ns.RefreshOptions()
 end
