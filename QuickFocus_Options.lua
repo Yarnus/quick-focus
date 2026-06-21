@@ -6,7 +6,7 @@ local controls = {}
 
 local TEXT = ns.isChinese and {
     DESCRIPTION = "敌对单位上按修饰键 + 左键：设置焦点、更新团队标记并按需喊话。"
-        .. "无单位处可选清除焦点。无扫描、无轮询，战斗中设置会在脱战后应用。",
+        .. "无单位处可选清除焦点。事件驱动、无轮询，战斗中设置会在脱战后应用。",
     ENABLE = "启用 QuickFocus",
     RAID_MARKER = "团队标记",
     TRIGGER_KEY = "触发按键",
@@ -23,7 +23,7 @@ local TEXT = ns.isChinese and {
     UNKNOWN = "未知",
 } or {
     DESCRIPTION = "Modifier + Left Click on a hostile unit sets focus, updates its raid marker, and optionally sends a callout. "
-        .. "The same key can clear focus over empty space. No scanning or polling; combat changes apply after combat.",
+        .. "The same key can clear focus over empty space. Event-driven with no polling; combat changes apply after combat.",
     ENABLE = "Enable QuickFocus",
     RAID_MARKER = "Raid marker",
     TRIGGER_KEY = "Trigger key",

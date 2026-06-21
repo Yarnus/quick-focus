@@ -141,6 +141,25 @@ local function SafeSetAttribute(frame, key, value)
     return pcall(frame.SetAttribute, frame, key, value)
 end
 
+local function SafeGetAttribute(frame, key)
+    local ok, value = pcall(frame.GetAttribute, frame, key)
+    if ok then
+        return value
+    end
+end
+
+local function SafeGetChildren(frame)
+    local ok, children = pcall(function()
+        return { frame:GetChildren() }
+    end)
+    return ok and children or nil
+end
+
+local function SafeGetMacroBody(index)
+    local ok, _, _, body = pcall(GetMacroInfo, index)
+    return ok, body
+end
+
 function addon:GetDB()
     return self.db
 end
@@ -226,6 +245,16 @@ end
 function addon:EnsureMacro(name, body)
     local index = GetMacroIndexByName(name)
     if index and index > 0 then
+        local ok, currentBody = SafeGetMacroBody(index)
+        if not ok then
+            return nil, "CREATE_FAILED"
+        end
+        if currentBody ~= body then
+            local ok, editedIndex = pcall(EditMacro, index, name, MACRO_ICON, body)
+            if not ok or not editedIndex or editedIndex == 0 then
+                return nil, "CREATE_FAILED"
+            end
+        end
         return name
     end
 
@@ -265,8 +294,11 @@ function addon:CreateClickButton()
         UIParent,
         "SecureActionButtonTemplate"
     )
-    button:SetAttribute("type1", "macro")
-    button:SetAttribute("macro", FOCUS_MACRO)
+    local okType = SafeSetAttribute(button, "type1", "macro")
+    local okMacro = SafeSetAttribute(button, "macro", FOCUS_MACRO)
+    if not okType or not okMacro then
+        return nil
+    end
     button:RegisterForClicks("AnyDown", "AnyUp")
     self.clickButton = button
     return button
@@ -316,6 +348,21 @@ function addon:ClearUnitFrameBindings()
     end
 end
 
+function addon:RefreshUnitFrameBindings()
+    if InCombatLockdown() then
+        return
+    end
+    local frames = {}
+    for frame in pairs(installedFrames) do
+        frames[#frames + 1] = frame
+    end
+    for index = 1, #frames do
+        local frame = frames[index]
+        self:ClearFrameBindings(frame)
+        self:SetupUnitFrame(frame)
+    end
+end
+
 function addon:SetupPendingFrames()
     if not self.pendingFrames then
         return
@@ -331,7 +378,7 @@ function addon:HookUnitFrameCreation()
     end
     self.createFrameHooked = true
     hooksecurefunc("CreateFrame", function(_, name, parent, template)
-        if template and template:find("SecureUnitButtonTemplate", 1, true) then
+        if addon.active and template and template:find("SecureUnitButtonTemplate", 1, true) then
             addon:SetupUnitFrame(name and _G[name])
         end
     end)
@@ -341,16 +388,12 @@ function addon:SetupFrameTree(frame)
     if not frame or type(frame.GetChildren) ~= "function" then
         return
     end
-    local ok, unit = pcall(function()
-        return type(frame.GetAttribute) == "function" and frame:GetAttribute("unit")
-    end)
-    if ok and unit then
+    local unit = type(frame.GetAttribute) == "function" and SafeGetAttribute(frame, "unit")
+    if unit then
         self:SetupUnitFrame(frame)
     end
-    local okChildren, children = pcall(function()
-        return { frame:GetChildren() }
-    end)
-    if not okChildren then
+    local children = SafeGetChildren(frame)
+    if not children then
         return
     end
     for index = 1, #children do
@@ -374,8 +417,11 @@ end
 
 function addon:SetupClickBindings()
     local button = self:CreateClickButton()
+    if not button then
+        return false
+    end
     self:ClearClickBindings()
-    SetOverrideBindingClick(button, true, self:GetBindingChord(), BUTTON_NAME)
+    return pcall(SetOverrideBindingClick, button, true, self:GetBindingChord(), BUTTON_NAME)
 end
 
 function addon:Disable()
@@ -414,8 +460,14 @@ function addon:Refresh()
         return
     end
 
-    self:SetupClickBindings()
+    if not self:SetupClickBindings() then
+        self:Disable()
+        Print(L.MACRO_CREATE_FAILED:format(FOCUS_MACRO))
+        ns.RefreshOptions()
+        return
+    end
     self:HookUnitFrameCreation()
+    self:RefreshUnitFrameBindings()
     self:SetupPendingFrames()
     self.active = true
     ns.RefreshOptions()

@@ -5,7 +5,7 @@
 ## Notes-zhTW: 輕量、安全的滑鼠懸停設焦點、團隊標記與喊話插件。
 ## IconTexture: Interface\AddOns\QuickFocus\QuickFocus.tga
 ## Author: Codex
-## Version: 1.1.8
+## Version: 1.1.9
 ## SavedVariablesPerCharacter: QuickFocusDB
 
 QuickFocus.lua
