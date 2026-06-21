@@ -26,6 +26,7 @@ local L = isChinese and {
     },
     MESSAGE_TOO_LONG = "喊话内容过长，宏超过 255 字节，已保留旧设置。",
     MACRO_FULL = "宏栏已满，无法创建 %s。",
+    MACRO_CREATE_FAILED = "无法创建或更新 %s，请打开宏界面检查宏名称和可用宏槽。",
     CLEAR_MACRO_FULL = "宏栏已满，空白处清除功能暂不可用。",
     ENABLED = "已启用。",
     DISABLED = "已停用。",
@@ -51,6 +52,7 @@ local L = isChinese and {
     },
     MESSAGE_TOO_LONG = "The callout is too long and exceeds the 255-byte macro limit. The previous settings were kept.",
     MACRO_FULL = "The macro slots are full. Unable to create %s.",
+    MACRO_CREATE_FAILED = "Unable to create or update %s. Open the macro UI and check the macro name and available slots.",
     CLEAR_MACRO_FULL = "The macro slots are full. Clear-on-blank is temporarily unavailable.",
     ENABLED = "Enabled.",
     DISABLED = "Disabled.",
@@ -215,21 +217,34 @@ function addon:EnsureMacro(name, body)
     if index and index > 0 then
         local _, _, currentBody = GetMacroInfo(index)
         if currentBody ~= body then
-            EditMacro(index, name, MACRO_ICON, body)
+            local ok
+            ok, index = pcall(EditMacro, index, name, MACRO_ICON, body)
+            if not ok or not index or index == 0 then
+                return nil, "CREATE_FAILED"
+            end
         end
         return name
     end
 
     local generalCount, characterCount = GetNumMacros()
-    if characterCount < 18 then
-        CreateMacro(name, MACRO_ICON, body, true)
-        return name
+    if characterCount < MAX_CHARACTER_MACROS then
+        local ok
+        ok, index = pcall(CreateMacro, name, MACRO_ICON, body, true)
+        if ok and index and index > 0 then
+            return name
+        end
     end
-    if generalCount < 120 then
-        CreateMacro(name, MACRO_ICON, body, false)
-        return name
+    if generalCount < MAX_ACCOUNT_MACROS then
+        local ok
+        ok, index = pcall(CreateMacro, name, MACRO_ICON, body, false)
+        if ok and index and index > 0 then
+            return name
+        end
     end
-    return nil, "NO_SLOT"
+    if characterCount >= MAX_CHARACTER_MACROS and generalCount >= MAX_ACCOUNT_MACROS then
+        return nil, "NO_SLOT"
+    end
+    return nil, "CREATE_FAILED"
 end
 
 function addon:GetStateCondition()
@@ -296,8 +311,10 @@ function addon:Refresh()
         self:Disable()
         if reason == "TOO_LONG" then
             Print(L.MESSAGE_TOO_LONG)
-        else
+        elseif reason == "NO_SLOT" then
             Print(L.MACRO_FULL:format(FOCUS_MACRO))
+        else
+            Print(L.MACRO_CREATE_FAILED:format(FOCUS_MACRO))
         end
         ns.RefreshOptions()
         return
@@ -305,11 +322,15 @@ function addon:Refresh()
 
     self.clearMacroReady = false
     if self.db.clearOnBlank then
-        local clearName = self:EnsureMacro(CLEAR_MACRO, self:BuildClearMacro())
+        local clearName, clearReason = self:EnsureMacro(CLEAR_MACRO, self:BuildClearMacro())
         self.clearMacroReady = clearName ~= nil
         if not clearName and not self.clearWarningShown then
             self.clearWarningShown = true
-            Print(L.CLEAR_MACRO_FULL)
+            if clearReason == "NO_SLOT" then
+                Print(L.CLEAR_MACRO_FULL)
+            else
+                Print(L.MACRO_CREATE_FAILED:format(CLEAR_MACRO))
+            end
         end
     else
         self.clearWarningShown = nil
