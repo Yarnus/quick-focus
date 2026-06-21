@@ -76,6 +76,7 @@ local DEFAULTS = {
 }
 
 local installedFrames = {}
+local frameModifiers = {}
 
 local MARKS = {
     { 1, L.MARKS[1], "{rt1}" },
@@ -134,6 +135,10 @@ local function ApplyDefaults(db)
             db[key] = value
         end
     end
+end
+
+local function SafeSetAttribute(frame, key, value)
+    return pcall(frame.SetAttribute, frame, key, value)
 end
 
 function addon:GetDB()
@@ -270,10 +275,10 @@ end
 function addon:ClearFrameBindings(frame)
     for index = 1, #MODIFIERS do
         local prefix = MODIFIERS[index][4]
-        frame:SetAttribute(prefix .. "-type1", nil)
-        frame:SetAttribute(prefix .. "-macro1", nil)
+        SafeSetAttribute(frame, prefix .. "-type1", nil)
+        SafeSetAttribute(frame, prefix .. "-macro1", nil)
     end
-    frame.quickFocusModifier = nil
+    frameModifiers[frame] = nil
 end
 
 function addon:SetupUnitFrame(frame)
@@ -287,12 +292,15 @@ function addon:SetupUnitFrame(frame)
     end
 
     local prefix = self:GetModifierAttribute()
-    if frame.quickFocusModifier ~= prefix then
+    if frameModifiers[frame] ~= prefix then
         self:ClearFrameBindings(frame)
     end
-    frame:SetAttribute(prefix .. "-type1", "macro")
-    frame:SetAttribute(prefix .. "-macro1", FOCUS_MACRO)
-    frame.quickFocusModifier = prefix
+    local okType = SafeSetAttribute(frame, prefix .. "-type1", "macro")
+    local okMacro = SafeSetAttribute(frame, prefix .. "-macro1", FOCUS_MACRO)
+    if not okType or not okMacro then
+        return
+    end
+    frameModifiers[frame] = prefix
     installedFrames[frame] = true
     self.pendingFrames = self.pendingFrames or {}
     self.pendingFrames[frame] = nil
@@ -329,29 +337,22 @@ function addon:HookUnitFrameCreation()
     end)
 end
 
-function addon:SetupExistingUnitFrames()
-    local handled = {}
-    for _, frame in pairs(_G) do
-        if type(frame) == "table"
-            and type(frame.GetObjectType) == "function"
-            and type(frame.GetAttribute) == "function"
-            and frame:GetAttribute("unit")
-            and not handled[frame]
-        then
-            handled[frame] = true
-            self:SetupUnitFrame(frame)
-        end
-    end
-end
-
 function addon:SetupFrameTree(frame)
     if not frame or type(frame.GetChildren) ~= "function" then
         return
     end
-    if type(frame.GetAttribute) == "function" and frame:GetAttribute("unit") then
+    local ok, unit = pcall(function()
+        return type(frame.GetAttribute) == "function" and frame:GetAttribute("unit")
+    end)
+    if ok and unit then
         self:SetupUnitFrame(frame)
     end
-    local children = { frame:GetChildren() }
+    local okChildren, children = pcall(function()
+        return { frame:GetChildren() }
+    end)
+    if not okChildren then
+        return
+    end
     for index = 1, #children do
         self:SetupFrameTree(children[index])
     end
@@ -415,7 +416,7 @@ function addon:Refresh()
 
     self:SetupClickBindings()
     self:HookUnitFrameCreation()
-    self:SetupExistingUnitFrames()
+    self:SetupPendingFrames()
     self.active = true
     ns.RefreshOptions()
 end
@@ -526,7 +527,7 @@ addon:SetScript("OnEvent", function(self, event, arg1)
         end
     elseif event == "GROUP_ROSTER_UPDATE" then
         if self.db and self.db.enabled and not InCombatLockdown() then
-            self:SetupExistingUnitFrames()
+            self:SetupPendingFrames()
         end
     elseif event == "PLAYER_REGEN_ENABLED" then
         if self.pendingRefresh then
