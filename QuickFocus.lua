@@ -5,7 +5,7 @@ ns.addon = addon
 
 local FOCUS_MACRO = "QF_Focus"
 local CLEAR_MACRO = "QF_Clear"
-local MACRO_ICON = "INV_Misc_QuestionMark"
+local MACRO_ICON = 134400
 local STATE_NAME = "quickfocus"
 
 local locale = GetLocale()
@@ -208,6 +208,14 @@ function addon:GetMacroPreview()
     return body, #body, #body <= 255
 end
 
+local function MacroMatches(index, body)
+    if type(index) ~= "number" or index <= 0 then
+        return false
+    end
+    local _, _, savedBody = GetMacroInfo(index)
+    return savedBody == body
+end
+
 function addon:EnsureMacro(name, body)
     if #body > 255 then
         return nil, "TOO_LONG"
@@ -222,6 +230,9 @@ function addon:EnsureMacro(name, body)
             if not ok or not index or index == 0 then
                 return nil, "CREATE_FAILED"
             end
+            if not MacroMatches(index, body) then
+                return nil, "CREATE_FAILED"
+            end
         end
         return name
     end
@@ -230,14 +241,14 @@ function addon:EnsureMacro(name, body)
     if characterCount < MAX_CHARACTER_MACROS then
         local ok
         ok, index = pcall(CreateMacro, name, MACRO_ICON, body, true)
-        if ok and index and index > 0 then
+        if ok and MacroMatches(index, body) then
             return name
         end
     end
     if generalCount < MAX_ACCOUNT_MACROS then
         local ok
         ok, index = pcall(CreateMacro, name, MACRO_ICON, body, false)
-        if ok and index and index > 0 then
+        if ok and MacroMatches(index, body) then
             return name
         end
     end
@@ -436,6 +447,12 @@ addon:SetScript("OnEvent", function(self, event, arg1)
         end
     elseif event == "PLAYER_LOGIN" then
         self:ApplySettings()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        self:ApplySettings()
+    elseif event == "UPDATE_MACROS" and self.db and self.db.enabled then
+        if GetMacroIndexByName(FOCUS_MACRO) == 0 then
+            self:ApplySettings()
+        end
     elseif event == "PLAYER_REGEN_ENABLED" and self.pendingRefresh then
         self:Refresh()
     end
@@ -443,4 +460,6 @@ end)
 
 addon:RegisterEvent("ADDON_LOADED")
 addon:RegisterEvent("PLAYER_LOGIN")
+addon:RegisterEvent("PLAYER_ENTERING_WORLD")
+addon:RegisterEvent("UPDATE_MACROS")
 addon:RegisterEvent("PLAYER_REGEN_ENABLED")
