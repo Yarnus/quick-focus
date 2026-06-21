@@ -6,6 +6,7 @@ ns.addon = addon
 local FOCUS_MACRO = "QF_Focus"
 local MACRO_ICON = 134400
 local STATE_NAME = "quickfocus"
+local DB_VERSION = 2
 
 local locale = GetLocale()
 local isChinese = locale == "zhCN" or locale == "zhTW"
@@ -71,6 +72,7 @@ local DEFAULTS = {
     chatMode = "PARTY",
     customCommand = "",
     message = L.DEFAULT_MESSAGE,
+    version = DB_VERSION,
 }
 
 local MARKS = {
@@ -387,6 +389,7 @@ function addon:Initialize()
         QuickFocusDB = {}
     end
     self.db = QuickFocusDB
+    local previousVersion = tonumber(self.db.version) or 0
     ApplyDefaults(self.db)
 
     if not self:GetMark(self.db.mark) then
@@ -400,6 +403,10 @@ function addon:Initialize()
     end
     self.db.enabled = self.db.enabled ~= false
     self.db.clearOnBlank = self.db.clearOnBlank == true
+    if previousVersion < DB_VERSION then
+        self.db.clearOnBlank = true
+        self.db.version = DB_VERSION
+    end
     self.db.customCommand = Clean(self.db.customCommand)
     self.db.message = Clean(self.db.message)
 
