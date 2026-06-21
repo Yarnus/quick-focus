@@ -14,6 +14,8 @@ QuickFocus is a lightweight WoW Retail addon that reimplements the core features
 - Automatically defer setting changes made during combat until combat ends
 - Automatically use Chinese on `zhCN`/`zhTW` clients and English on all other clients
 
+On third-party unit frames and nameplates, QuickFocus uses the frame's native secure focus action for reliability. Marker and callout behavior still depends on the generated macro when a valid mouseover unit is available.
+
 ## Lightweight Design
 
 - Installs secure click attributes on unit frames and nameplates

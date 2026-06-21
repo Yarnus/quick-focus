@@ -327,9 +327,8 @@ function addon:SetupUnitFrame(frame)
     if frameModifiers[frame] ~= prefix then
         self:ClearFrameBindings(frame)
     end
-    local okType = SafeSetAttribute(frame, prefix .. "-type1", "macro")
-    local okMacro = SafeSetAttribute(frame, prefix .. "-macro1", FOCUS_MACRO)
-    if not okType or not okMacro then
+    local okType = SafeSetAttribute(frame, prefix .. "-type1", "focus")
+    if not okType then
         return
     end
     frameModifiers[frame] = prefix
